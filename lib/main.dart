@@ -114,6 +114,7 @@ class _MyAppHomeState extends State<MyAppHome> {
         title: const Text("Escalonador Real-Time (EDF / RM)"),
         centerTitle: true,
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: Column(
         children: [
           const SizedBox(height: 16),
@@ -161,16 +162,16 @@ class _MyAppHomeState extends State<MyAppHome> {
         ],
       ),
       floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          FloatingActionButton(
-            heroTag: "btn_add",
-            mini: true,
-            onPressed: _addProcess,
-            child: const Icon(Icons.add),
-          ),
-          const SizedBox(height: 12),
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start, 
+            children: [
+              FloatingActionButton(
+                heroTag: "btn_add",
+                mini: true,
+                onPressed: _addProcess,
+                child: const Icon(Icons.add),
+              ),
+              const SizedBox(height: 12),
           FloatingActionButton.extended(
             heroTag: "btn_run",
             backgroundColor: Colors.green.shade700,
