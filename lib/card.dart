@@ -9,38 +9,14 @@ class ProcessCard extends StatefulWidget {
   });
 
   final int processId;
-  num _initTime = 0;
-  num _ttf = 1;
-  num _deadline = 0;
+  num _offset = 0;      // Init Time
+  num _computation = 1; // C
+  num _period = 5;      // T
   Color cardColor;
 
-  num getInitTime() {
-    return _initTime;
-  }
-
-  num getTtf() {
-    return _ttf;
-  }
-
-  num getDeadline() {
-    return _deadline;
-  }
-
-  void setInitTime(num newInitTime) {
-    _initTime = newInitTime;
-  }
-
-  void setTtf(num newTtf) {
-    if (newTtf > 0) {
-      _ttf = newTtf;
-    } else {
-      _ttf = 1;
-    }
-  }
-
-  void setDeadline(num newDeadline) {
-    _deadline = newDeadline;
-  }
+  int getOffset() => _offset.toInt();
+  int getComputation() => _computation.toInt();
+  int getPeriod() => _period.toInt();
 
   @override
   State<ProcessCard> createState() => _ProcessCard();
@@ -49,85 +25,70 @@ class ProcessCard extends StatefulWidget {
 class _ProcessCard extends State<ProcessCard> {
   @override
   Widget build(BuildContext context) {
-    return Container(
-        width: 400,
-        height: 350,
-        decoration: BoxDecoration(border: Border.all(color: Colors.black)),
-        child: Center(
-          child: Container(
-            color: widget.cardColor,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(50.0),
-                  child: Text(
-                    "#${widget.processId.toString()}",
-                    style: const TextStyle(
-                        fontSize: 50, fontWeight: FontWeight.bold),
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        height: 100, // Altura reduzida fixada
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            // ID Badge
+            Container(
+              width: 60,
+              decoration: BoxDecoration(
+                color: widget.cardColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: widget.cardColor, width: 2)
+              ),
+              child: Center(
+                child: Text(
+                  "P${widget.processId}",
+                  style: TextStyle(
+                    fontSize: 20, 
+                    fontWeight: FontWeight.bold, 
+                    color: widget.cardColor
                   ),
                 ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Init Time: ",
-                              style: TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold)),
-                          InputQty(
-                            minVal: 0,
-                            initVal: widget.getInitTime(),
-                            onQtyChanged: (value) => {
-                              setState(() => widget.setInitTime(value.toInt()))
-                            },
-                          )
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Deadline: ",
-                              style: TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold)),
-                          InputQty(
-                            minVal: 0,
-                            initVal: widget.getDeadline(),
-                            onQtyChanged: (value) => {
-                              setState(() => widget.setDeadline(value.toInt()))
-                            },
-                          )
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text("Time to Finish: ",
-                              style: TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold)),
-                          InputQty(
-                            minVal: 1,
-                            initVal: widget.getTtf(),
-                            onQtyChanged: (value) =>
-                                {setState(() => widget.setTtf(value.toInt()))},
-                          )
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-              ],
+              ),
             ),
+            const SizedBox(width: 12),
+            // Inputs
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildInput("Comp. (C)", widget._computation, (val) => widget._computation = val),
+                  _buildInput("Period (T)", widget._period, (val) => widget._period = val),
+                  _buildInput("Offset (O)", widget._offset, (val) => widget._offset = val, min: 0),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInput(String label, num initVal, Function(num) onChanged, {num min = 1}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 90,
+          child: InputQty(
+            maxVal: 100,
+            minVal: min,
+            initVal: initVal,
+            showMessageLimit: false,
+            btnColor1: Colors.grey,
+            onQtyChanged: (val) => setState(() => onChanged(val)),
           ),
-        ));
+        ),
+      ],
+    );
   }
 }

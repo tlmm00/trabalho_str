@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:tuple/tuple.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
-// Importações dos modelos e lógica
 import 'src/model/process.dart';
 import 'src/app/edf.dart';
 import 'src/app/rm.dart';
@@ -19,10 +17,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Real-Time Scheduler',
+      title: 'RT Scheduler',
       theme: ThemeData(
-        primarySwatch: Colors.indigo,
+        primarySwatch: Colors.indigo, 
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.grey.shade100,
       ),
       home: const MyAppHome(),
     );
@@ -37,223 +36,273 @@ class MyAppHome extends StatefulWidget {
 }
 
 class _MyAppHomeState extends State<MyAppHome> {
-  // Lista de cards (UI)
   final List<ProcessCard> cardList = [];
-  
-  // Contador para garantir processId único mesmo após remoções
   int _idCounter = 0;
-
-  // Estado do seletor: [0] EDF, [1] RM
-  final List<bool> _selectedMethods = [true, false];
+  final List<bool> _selectedMethods = [true, false]; 
   int _selectedMethodId = 0;
 
   @override
   void initState() {
     super.initState();
-    _addProcess(); // Inicia com um processo
+    _addProcess(); 
   }
 
-  /// Adiciona um novo processo garantindo o 'processId' obrigatório
   void _addProcess() {
     setState(() {
-      cardList.add(ProcessCard(
-        key: UniqueKey(),
-        processId: _idCounter, // CORREÇÃO: Passando o parâmetro obrigatório
-      ));
+      cardList.add(ProcessCard(key: UniqueKey(), processId: _idCounter));
       _idCounter++;
     });
   }
 
-  /// Remove um processo específico
   void _removeProcess(Key key) {
     setState(() {
       cardList.removeWhere((card) => card.key == key);
     });
   }
 
-  /// Ponte entre a UI e os Algoritmos de Tempo Real
-  Tuple3<List<Process>, Map<int, List<int>>, double> _runSimulation() {
-    final List<Process> processes = [];
+  int gcd(int a, int b) => b == 0 ? a : gcd(b, a % b);
+  int lcm(int a, int b) => (a * b) ~/ gcd(a, b);
+
+  int calculateHyperperiod(List<Process> processes) {
+    if (processes.isEmpty) return 0;
+    int res = processes[0].period;
+    for (int i = 1; i < processes.length; i++) {
+      res = lcm(res, processes[i].period);
+    }
+    return res > 100 ? 100 : res; 
+  }
+
+  void _runSimulation() {
+    if (cardList.isEmpty) return;
+
+    final List<Process> processes = cardList.map((card) => Process(
+      id: card.processId, 
+      offset: card.getOffset(),
+      computationTime: card.getComputation(),
+      period: card.getPeriod(),
+    )).toList();
+
+    int simulationTime = calculateHyperperiod(processes);
     
-    for (int i = 0; i < cardList.length; i++) {
-      final card = cardList[i];
-      // O ID do processo para o escalonador será o processId do Card
-      processes.add(Process(
-        id: card.processId, 
-        timeInit: card.getInitTime().toInt(),
-        ttf: card.getTtf().toInt(),
-        deadline: card.getDeadline().toInt(),
-      ));
-    }
-
-    Map<int, List<int>> executionMatrix;
-
-    // Executa conforme paradigma de Tempo Real
-    if (_selectedMethodId == 0) {
-      executionMatrix = edf(processes, 0, 0); 
-    } else {
-      executionMatrix = rm(processes); 
-    }
-
-    // Cálculo do tempo médio de execução (Turnaround Lógico)
-    double totalTurnaround = 0;
+    double theoreticalUtil = 0;
     for (var p in processes) {
-      final int lastTick = executionMatrix[p.id]?.lastIndexOf(1) ?? -1;
-      final int endTime = (lastTick != -1) ? lastTick + 1 : 0;
-      totalTurnaround += (endTime - p.timeInit);
+      theoreticalUtil += (p.computationTime / p.period);
+    }
+
+    // Agora recebemos um Objeto de Resultado (SimulationResult)
+    SimulationResult result;
+    if (_selectedMethodId == 0) {
+      result = edf(processes, simulationTime);
+    } else {
+      result = rm(processes, simulationTime);
+    }
+
+    // Cálculo Real
+    int busyTicks = 0;
+    for (int t = 0; t < simulationTime; t++) {
+      bool isBusy = false;
+      for (var key in result.matrix.keys) {
+        if (key != -1 && result.matrix[key]!.length > t && result.matrix[key]![t] == 1) {
+          isBusy = true; 
+          break;
+        }
+      }
+      if (isBusy) busyTicks++;
     }
     
-    final double avgTime = processes.isNotEmpty ? totalTurnaround / processes.length : 0;
-    return Tuple3(processes, executionMatrix, avgTime);
+    double realUtil = simulationTime > 0 ? busyTicks / simulationTime : 0;
+    
+    // Agora verificamos result.totalMisses que vem da simulação real
+    bool isSchedulable = theoreticalUtil <= 1.0 && result.totalMisses == 0;
+    
+    _showResults(result.matrix, processes, theoreticalUtil, realUtil, isSchedulable, simulationTime, result.totalMisses);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Escalonador Real-Time (EDF / RM)"),
-        centerTitle: true,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Column(
-        children: [
-          const SizedBox(height: 16),
-          // Seletor de Algoritmo
-          Center(
-            child: ToggleButtons(
-              isSelected: _selectedMethods,
-              borderRadius: BorderRadius.circular(10),
-              selectedColor: Colors.white,
-              fillColor: Colors.indigo,
-              onPressed: (int index) {
-                setState(() {
-                  for (int i = 0; i < _selectedMethods.length; i++) {
-                    _selectedMethods[i] = (i == index);
-                  }
-                  _selectedMethodId = index;
-                });
-              },
-              children: const [
-                Padding(padding: EdgeInsets.symmetric(horizontal: 32), child: Text("EDF")),
-                Padding(padding: EdgeInsets.symmetric(horizontal: 32), child: Text("RM")),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.builder(
-              itemCount: cardList.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(child: cardList[index]),
-                      IconButton(
-                        icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-                        onPressed: () => _removeProcess(cardList[index].key!),
-                      )
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start, 
-            children: [
-              FloatingActionButton(
-                heroTag: "btn_add",
-                mini: true,
-                onPressed: _addProcess,
-                child: const Icon(Icons.add),
-              ),
-              const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: "btn_run",
-            backgroundColor: Colors.green.shade700,
-            onPressed: () {
-              if (cardList.isEmpty) return;
-              final result = _runSimulation();
-              showGridViewDialog(context, result.item2, result.item1, result.item3);
-            },
-            label: const Text("SIMULAR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            icon: const Icon(Icons.play_arrow, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void showGridViewDialog(BuildContext context, Map<int, List<int>> matrix, List<Process> processes, double avgTime) {
-    int totalTicks = matrix.isNotEmpty ? matrix.values.first.length : 0;
-
+  void _showResults(
+    Map<int, List<int>> matrix, 
+    List<Process> processes, 
+    double theoryU, 
+    double realU, 
+    bool feasible,
+    int duration,
+    int misses
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Gantt: ${_selectedMethodId == 0 ? 'EDF' : 'RM'}"),
+        title: Row(
+          children: [
+            const Icon(Icons.bar_chart),
+            const SizedBox(width: 10),
+            Text("${_selectedMethodId == 0 ? 'EDF' : 'RM'} (LCM: $duration)"),
+          ],
+        ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.9,
+          width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: feasible ? Colors.green.shade50 : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: feasible ? Colors.green : Colors.red),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStat("Teórico (U)", "${(theoryU * 100).toStringAsFixed(1)}%"),
+                    _buildStat("Real (U)", "${(realU * 100).toStringAsFixed(1)}%"),
+                    Column(
+                      children: [
+                        Text(
+                          feasible ? "SUCESSO" : "FALHA",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: feasible ? Colors.green : Colors.red
+                          ),
+                        ),
+                        if (misses > 0)
+                          Text("$misses Deadline Misses!", style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold))
+                      ],
+                    )
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               Flexible(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: totalTicks * 52.0,
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      itemCount: (processes.length + 1) * totalTicks, 
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: totalTicks,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(width: 50),
+                          ...List.generate(duration, (i) => Container(
+                            width: 30, 
+                            alignment: Alignment.center,
+                            child: Text("$i", style: const TextStyle(fontSize: 10)),
+                          ))
+                        ],
                       ),
-                      itemBuilder: (context, index) {
-                        int rowId = index ~/ totalTicks;
-                        int colId = index % totalTicks;
-                        
-                        // ID -1 para linha de IDLE (conforme script Python)
-                        int processKey = (rowId < processes.length) ? processes[rowId].id : -1;
-                        int status = matrix[processKey]?[colId] ?? 0;
-
-                        Color color = Colors.grey.shade100;
-                        Widget content = Text("$colId", style: TextStyle(fontSize: 10, color: Colors.grey.shade400));
-
-                        if (status == 1) {
-                          color = processKey == -1 ? Colors.orangeAccent : Colors.indigoAccent;
-                          content = Text(processKey == -1 ? "Zz" : "P$processKey", 
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold));
-                        }
-
-                        return Container(
-                          margin: const EdgeInsets.all(1.5),
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.black12, width: 0.5),
-                          ),
-                          child: Center(child: content),
-                        ).animate().scale(delay: Duration(milliseconds: colId * 30), duration: 200.ms);
-                      },
-                    ),
+                      const Divider(),
+                      ...processes.map((p) => _buildGanttRow(p.id, matrix[p.id]!, duration)),
+                      const Divider(),
+                      _buildGanttRow(-1, matrix[-1]!, duration, isIdle: true),
+                    ],
                   ),
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.only(top: 20),
-                child: Text("O tempo avança em unidades discretas (ticks).", style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12)),
-              ),
-              Text("Média Turnaround: ${avgTime.toStringAsFixed(2)} ticks",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.indigo)),
             ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("FECHAR")),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStat(String label, String value) {
+    return Column(children: [Text(label, style: const TextStyle(fontSize: 10)), Text(value, style: const TextStyle(fontWeight: FontWeight.bold))]);
+  }
+
+  Widget _buildGanttRow(int pid, List<int> timeline, int duration, {bool isIdle = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 8),
+            child: Text(isIdle ? "IDLE" : "P$pid", style: TextStyle(fontWeight: FontWeight.bold, color: isIdle ? Colors.grey : Colors.indigo)),
+          ),
+          ...List.generate(duration, (t) {
+            int val = (t < timeline.length) ? timeline[t] : 0;
+            return Container(
+              width: 30, height: 20,
+              margin: const EdgeInsets.symmetric(horizontal: 1), 
+              decoration: BoxDecoration(
+                color: val == 1 
+                  ? (isIdle ? Colors.grey.shade400 : Colors.indigo) 
+                  : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          })
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Simulador Tempo Real"), elevation: 2),
+      body: Column(
+        children: [
+          const SizedBox(height: 10),
+          ToggleButtons(
+            isSelected: _selectedMethods,
+            borderRadius: BorderRadius.circular(30),
+            fillColor: Colors.indigo,
+            selectedColor: Colors.white,
+            onPressed: (idx) => setState(() {
+              for(int i=0; i<2; i++) _selectedMethods[i] = i == idx;
+              _selectedMethodId = idx;
+            }),
+            children: const [
+              Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Text("EDF")),
+              Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Text("RM")),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 80),
+              itemCount: cardList.length,
+              itemBuilder: (context, index) {
+                final card = cardList[index];
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: card),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _removeProcess(card.key!),
+                      ),
+                    )
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _runSimulation,
+        label: const Text("SIMULAR"),
+        icon: const Icon(Icons.play_arrow),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
+      bottomNavigationBar: BottomAppBar(
+        height: 60,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text("Adicionar Tarefa ", style: TextStyle(color: Colors.indigo.shade900, fontWeight: FontWeight.bold)),
+            IconButton(
+              onPressed: _addProcess, 
+              icon: const Icon(Icons.add_circle, size: 32, color: Colors.indigo)
+            )
+          ],
+        ),
       ),
     );
   }

@@ -1,43 +1,66 @@
 class Process {
   int id;
-  int deadline;
-  int timeInit;
-  int ttf;
-  int execTime;
+  int period;           // T
+  int computationTime;  // C
+  int offset;           // O
+  
+  // Variáveis de estado dinâmico
+  int remainingTime;
+  int absoluteDeadline; 
+  int nextArrival;      
+  
+  // Diagnóstico
+  int deadlineMisses = 0; 
 
-  // Construtor com parâmetros nomeados para maior clareza
   Process({
     required this.id,
-    required this.timeInit,
-    required this.ttf,
-    required this.deadline,
-  }) : execTime = ttf;
+    required this.offset,
+    required this.computationTime,
+    required this.period,
+  }) : remainingTime = computationTime, 
+       nextArrival = offset,
+       absoluteDeadline = offset + period;
 
-  // Getters de compatibilidade para o código legado
-  int getId() => id;
-  int getDeadline() => deadline;
-  int getTimeInit() => timeInit;
-  int getTtf() => ttf;
+  bool checkArrival(int currentTime) {
+    if (currentTime == nextArrival) {
+      // Se a tarefa anterior não terminou, conta como erro
+      if (currentTime > 0 && remainingTime > 0) {
+        deadlineMisses++; 
+      }
 
-  // Reinicia o estado para re-submissão (Tempo Real)
-  void resetTtf() => this.ttf = this.execTime;
-
-  // Atualizado: aceita quantum opcional para o Round Robin
-  void updateTtf([int quantum = 1]) {
-    this.ttf -= quantum;
-    if (this.ttf < 0) this.ttf = 0;
+      if (currentTime >= offset) {
+        remainingTime = computationTime;
+        absoluteDeadline = currentTime + period;
+      }
+      
+      nextArrival += period; 
+      return true;
+    }
+    return false;
   }
 
-  void updateDeadline(int offset) {
-    this.deadline += offset;
+  void execute([int quantum = 1]) {
+    if (remainingTime > 0) {
+      remainingTime -= quantum;
+    }
   }
+
+  bool get isFinished => remainingTime <= 0;
 
   Process copy() {
     return Process(
       id: this.id,
-      timeInit: this.timeInit,
-      ttf: this.ttf,
-      deadline: this.deadline,
+      offset: this.offset,
+      computationTime: this.computationTime,
+      period: this.period,
     );
   }
+}
+
+/// Classe auxiliar para retornar a Matriz + Erros
+class SimulationResult {
+  final Map<int, List<int>> matrix;
+  final int totalMisses;
+
+  SimulationResult(this.matrix, this.totalMisses);
 }
